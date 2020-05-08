@@ -6,6 +6,11 @@
 #include <stdexcept> 
 #include <fstream>
 
+using std::cout;
+using std::endl;
+using std::cin;
+using std::string;
+using std::vector;
 using namespace std; 
 
 // Macros
@@ -16,14 +21,18 @@ using namespace std;
 #define CHANCES (float) rand() / (float)RAND_MAX 		// Chances in Life
 
 
-// ========================================= Person Class =========================================
+// ================================================================================================
+// Person Class 
+// ================================================================================================
 class Person {
 	protected: 
+	vector <Person> people;
 	int status; 							// (Infected : >= 1, Recovered : -1, Susceptible : 0,  Innoculated: -2)
 	int interaction;					// Number of interactions per day 
 	int recoveryDate;
 		
 	// Constructors 
+	// ================================================================================================
 	public:
 	Person(){  
 		status = 0; 
@@ -34,6 +43,42 @@ class Person {
 		status = s; 
 		interaction = setInteractionNum();
 		recoveryDate = setRecoveryPd();
+	}
+
+	// Update Functions
+	// ================================================================================================
+	int nextDay(){		   								// Updates the status to the next day
+		if (status > 0) {
+			status++; 
+			if (recoveryDate > status) {
+				status = -1;
+			} 
+		interaction = setInteractionNum(); // Setting NEW Daily Interaction 
+		return status; 
+	} 
+
+	void infected() {
+		if (status == 0) {
+			status++;
+		}
+	}
+	
+	// Set & Get
+	// ================================================================================================ 
+	int getStatus(){ 	
+		return status;
+	}
+	
+	void setStatus(int s){  
+		status = s; 
+	}
+
+	int getInteraction() { 
+		return interaction; 
+	}
+
+	int getRecoveryPd() {
+		return recoveryDate;
 	}
 
 	int setInteractionNum() {
@@ -53,114 +98,24 @@ class Person {
 			return -1;
 		}
 	}
-
-	// Update Function ================================================================================
-	int nextDay(){		   // Updates the status to the next day
-		if (status > 0) {
-			status++; 
-			if (recoveryDate > status) {
-				status = -1;
-			} 
-		interaction = setInteractionNum(); // Setting NEW Daily Interaction 
-		return status; 
-	} 
-
-	void infected() {
-		if (status == 0) {
-			status++;
-		}
-	}
-	
-	// Set & Get  ======================================================================================== 
-	int getStatus(){ 	// returns current status
-		return status;
-	}
-	
-	void setStatus(int s){  // sets status of person 
-		status = s; 
-	}
-
-	int getInteraction() { 
-		return interaction; 
-	}
-
-	int getRecoveryPd() {
-		return recoveryDate;
-	}
 };
 
-// ==================================== Population Class ================================================
+// ================================================================================================
+// Population Class
+// ================================================================================================
 class Population : Person {     // object composed of multiple person (inheritance used) 
-	protected:
-	vector <Person> people; // vector of people 
-	int day; 
-	bool travel_ban         // For future adaptations
 	public:
 	Population(){		
 		long size = 10000; 
 		setPopulation(size);
-		travel_ban = false;
-		day = 1;
+		day = 0;
 	}
 	Population(long population_size){ 	
 		setPopulation(population_size);
-		travel_ban = false; 
-		day = 1; 
+		day = 0; 
 	}
 
-	// Set & Get  ========================================================================================= 
-	vector<Person> getVector(){			// returns vector of Person 
-		return people; 
-	}
-	
-	void setPopulation(long size){	// Initialize Person 
-		Person random;
-		Person *people = (Person *) malloc(size * sizeof(Person)); // Allocation of Memory 
-		for (long i = 0; i < people.size(); i++){
-			people[i] = random;
-		}
-		people = people1; 
-	}
-
-	void random_infection(){   // intial random infection function 
-		for ( auto &e : people){
-			e.randInfect(); 		}	
-	}
-
-	long countInfection() { // returns total # of infection 
-		long count = 0; 
-		for ( auto &e : people) {
-			if ( e.getStatus() > 0) {
-				count = count + 1; 
-			}
-		}
-		return count; 
-	}
-
-	void setInitInnoculated(long innoculate_num){				// sets innoculated people 
-		for (long j = 0; j < innoculate_num; j++) {
-			people[j].setStatus(-2); 
-		}	
-	}
-
-	void setInitInfection(long infection_num) {
-		int infection_period; 
-		long count = 0; 
-		long id = 0;
-		while (count < infection_num && j < people.size()) {
-			id = (long) rand() % people.size();
-			if (people[id].getStatus >= 0 ) {
-				people[j].setStatus(infection_period);
-				count++;
-			}
-			id++;
-			if (id == people.size()) {
-				throw std::invalid_argument("There are too many innoculated people! Re-enter the inputs")
-			}
-		}
-	}
-
-	// Updating Population 
+	// Update Population 
 	// ================================================================================================
 	void updatePopulation(int days) {	// updates population based on interaction per day until no one's sick 
 		current_status(); 		  // outputs current status 
@@ -190,7 +145,7 @@ class Population : Person {     // object composed of multiple person (inheritan
 		printf("Data saved to file!");
 	}
 
-	// Social Infection - 1st Person Simulation 
+	//  1st Person Daily Interaction Simulation 
 	// ================================================================================================
 	void simulateDailyInteraction(Person person, long id){ 
 		long index = -1;
@@ -219,7 +174,56 @@ class Population : Person {     // object composed of multiple person (inheritan
 		}
 	}	
 
+	// Set & Get  	
+	// ================================================================================================
+	vector<Person> getVector(){			 
+		return people; 
+	}
+	
+	void setPopulation(long size){	
+		Person random;
+		for (long i = 0; i < people.size(); i++){
+			people[i] = random;
+		}
+		people
+	}
+
+	long countInfection() { 																	   // returns total # of infection 
+		long count = 0; 
+		for ( auto &e : people) {
+			if ( e.getStatus() > 0) {
+				count = count + 1; 
+			}
+		}
+		return count; 
+	}
+
+	void setInitInnoculated(long innoculate_num){									// sets innoculated people 
+		for (long j = 0; j < innoculate_num; j++) {
+			people[j].setStatus(-2); 
+		}	
+	}
+
+	void setInitInfection(long infection_num, long index) {
+		int infection_period; 
+		long count = 0; 
+		long id = 0;
+		for (int j = index; j < infection_num + index && j < people.size()) {
+			people[j].setStatus(infection_period);
+		}
+	}
+
+		void setInitialCond(long innoculate_num,long infection_num) {
+			if (innoculate_num + infection_num > people.size()) {
+				throw std::invalid_argument("There are too many innoculated people! Re-enter the inputs")
+			}
+			setInitInnoculated(innoculate_num);
+			setInitInfection(infection_num,innoculate_num);
+		}
+	}
+
 	// Status Output 
+	// ================================================================================================
 	void outputStatus(long countP, long countN, long countR) {
 		cout << "Inf: " << left << setw(10) << countP << "    Non-inf: " << left << setw(10) << countN << "    Rec OR Inn: " << left << countR << endl;					   
 	}
@@ -252,13 +256,16 @@ class Population : Person {     // object composed of multiple person (inheritan
 	}
 };	
 
-// ========================================= Main Function =========================================
+// ================================================================================================
+// Main Function 
+// ================================================================================================
 int main() {
 	long pop_size; 	// population size
 	long inn_size; 	// Number of Immune People   
 	int off = 1;  	// Code Termination Switch; 
 
-	// Simulation Variables ==========================================================================
+// Simulation Variables 
+// ================================================================================================
 	cout << "Enter Population: ";
 	cin >> pop;
 	cout << "Enter # of Intially Infected People: ";
@@ -271,10 +278,9 @@ int main() {
 	cout << right << setw(41) << "< SIMULATION >" << endl;
 	cout << endl;
 
-		Population p1(pop);
-		p1.setInitInnoculated(inn);
-		p1.setInitInfection(infect); 
-		p1.updatePopulation(days);
+	Population p1(pop);
+	p1.setInitialCond(inn,infect); 
+	p1.updatePopulation(days);
 
 	cout << endl;
 	cout << "Program Terminated" << endl; 
