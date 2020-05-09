@@ -16,14 +16,13 @@ using namespace std;
 #include <omp.h>
 #endif
  
-
 // Macros
-#define INFECTION_RATE 0.5 													// 50% 
-#define INTERACTION_NUM {12,3}  										// Interactions per Day (Mean, SD)
-#define DORMANT_PERIOD 14  													// Days Staying Dormant  
-#define RECOVERY_PERIOD {14.0,2.0} 									// Recovery Period (Mean, SD)
-#define CHANCES (float) rand() / (float)RAND_MAX 		// Chances in Life
-
+#define INFECTION_RATE 0.1 													// 30% 
+#define INTERACTION_MEAN 12  												// Interactions per Day (Mean, SD)
+#define INTERACTION_SD 2
+#define DORMANT_PERIOD 14  													// Virus Dormant Range 
+#define RECOVERY_MEAN 14 														// Recovery Period (Mean, SD)
+#define RECOVERY_SD 5 															
 
 // ================================================================================================
 // Population Class
@@ -43,92 +42,6 @@ class Population : Person {     // object composed of multiple person (inheritan
 		day = 0; 
 	}
 
-	void outputStatus(long countP, long countN, long countR) {
-		cout << "Inf: " << left << setw(10) << countP << "    Non-inf: " << left << setw(10) << countN << "    Rec OR Inn: " << left << countR << endl;					   
-	}
-
-	void dayOutput(){				// print function for arrangement
-		printf("<  DAY  %d >   ", day) ;
-	}
-
-	void current_status() {				// outputs current status of population 
-		dayOutput();
-		long countP = 0;				// total sickness
-		long countN = 0;				// total potential patients (yet to be sick)
-		long countR = 0;				// total recovered / innoculated 
-		for ( auto &e : people) {
-			if ( e.getStatus() > 0) {	// for sick individuals 
-          countP++;
-			}
-			else if ( e.getStatus() == 0) {	// for potential patients 
-				countN++;
-			}
-			else if ( e.getStatus() <= -1) {// for recovered & innoculated 
-				countR++;
-			}
-		}		
-		outputStatus(countP,countN,countR);
-	}
-
-	auto countStatus() { 																	   // returns total # of infection 
-		// Set as reduction 
-		long countP = 0;			// total sickness
-		long countN = 0; 		  // total potential patients 
-		long countR = 0;			// total recovered / innoculated 
-		long sickTotal = 0;
-		int status;
-		for ( long i = 0; i < people.size(); i++) {
-			status = people.at(i).getStatus();
-			if ( status < 0 ) {
-				countR++; 
-			} else if ( status == 0 ) {
-				countN++; 
-			} else {
-				countR++; 
-			}
-		}
-		struct result { long p; long n; long r;};
-		return result {countP, countN, countR};
-	}	
-
-	//  1st Person Daily Interaction Simulation 
-	// ================================================================================================
-	Person simulateDailyInteraction(Person person, long id){ 
-		long index = -1;
-		int interaction_count = 0;
-		bool infected = false; 
-		bool found = false; 
-		while (interaction_count < person.getInteraction()) {
-			found = false;
-			while (id != index && found == false) {		 					// Making sure we don't choose himself/herself 
-				index = (long) rand() % people.size(); 	 					// Random Search 
-				if (people.at(index).getStatus() < DORMANT_PERIOD) { // Checking for Self-Isolation
-					found = true; 
-				}
-			}
-			if (infected == false){															// Social Interaction Infection
-				if (people.at(index).getStatus() > 0 &&  CHANCES <= INFECTION_RATE) { 
-					person.infected(); 
-				} 
-			} else { 																						// Infecting Others
-				if (people.at(index).getStatus() == 0) {
-					people.at(index).infected();
-					infected = true;
-				}
-			}
-			interaction_count++;
-		}
-		person.setInteractionNum();
-
-		return person;
-	}	
-
-	// Set & Get  	
-	// ================================================================================================
-	vector<Person> getVector(){			 
-		return people; 
-	}
-	
 	void setPopulation(long size){	
 		Person random;
 		for (long i = 0; i < size; i++){
@@ -136,73 +49,218 @@ class Population : Person {     // object composed of multiple person (inheritan
 		}
 	}
 
-	void setInitInnoculated(long innoculate_num){									// sets innoculated people 
-		printf("Setting Inoculated \n");
-		for (long j = 0; j < innoculate_num; j++) {
-			people.at(j).setStatus(-2); 
-		}	
+	int setInteractionNum() {
+
+		std::default_random_engine generator; 
+		std::normal_distribution<float> distribution(INTERACTION_MEAN,INTERACTION_SD);
+
+		return (int) distribution(generator);  						
 	}
 
-	void setInitInfection(long infection_num, long index) {
-		printf("Setting Initial Infection \n");
-		long final_num = infection_num + index;
-		cout << final_num << endl;
-		for (long j = index; j < people.size(); j++) {
-			people.at(j).setStatus(1);
-		}
+	int setRecoveryPd() {
+
+		std::default_random_engine generator; 
+		std::normal_distribution<float> distribution(RECOVERY_MEAN,RECOVERY_SD);
+
+		return (int) distribution(generator);  						
 	}
+
+	void outputStatus(long countP, long countN, long countR, long countI) {
+		if (day < 10 ) {
+			printf("<  DAY   %d >   ", day);
+		} else {
+			printf("<  DAY  %d >   ", day);
+		}
+		cout << "Inf: " << left << setw(10) << countP << "    Non-inf: " << left << setw(10) << countN << "    Self-isolation : " << left << setw(10) << countI << "    Rec OR Inn: " << left << countR << endl;					   
+	}
+ 
+	auto countStatus() { 																	   // returns total # of infection 
+		// Set as reduction 
+		long countP = 0;			// total sickness
+		long countN = 0; 		  // total potential patients 
+		long countR = 0;			// total recovered / innoculated 
+		long countI = 0; 			// total isolated 
+		long sickTotal = 0;
+		int status;
+		#ifdef _OPENMP
+		#pragma omp parallel for schedule(dynamic) reduction (+:countR,countN,countP,countI)
+		for ( long i = 0; i < people.size(); i++) {
+			status = people.at(i).getStatus();
+			if ( status < 0 ) {
+				countR++; 
+			} else if ( status == 0 ) {
+				countN++; 
+			} else if ( status < DORMANT_PERIOD ) {
+				countP++; 
+			} else {
+				countI++;
+			}
+		}
+		#endif
+
+		double isolationPercent = (float) countI / (float) people.size(); 
+		int tMean = INTERACTION_MEAN;
+		int tSD = INTERACTION_SD;
+		
+		if (isolationPercent > 0.05) {
+			#undef	INTERACTION_MEAN 
+			#undef INTERACTION_SD
+			#define INTERACTION_MEAN  4
+			#define  INTERACTION_SD  1
+		} else {
+			#undef	INTERACTION_MEAN 
+			#undef INTERACTION_SD
+			#define INTERACTION_MEAN (int) tMean * isolationPercent
+			#define  INTERACTION_SD  (int) tSD * isolationPercent 
+		}		
+		struct result { long p; long n; long r; long i;};
+		return result {countP, countN, countR, countI};
+	}	
+
+	long randomEncounter(long id) {
+		bool found = false; 
+		long randomPerson = (long) rand() % people.size(); 	 					// Random Person 
+		while (found == false) {
+			if (randomPerson != id && people.at(randomPerson).getStatus() < DORMANT_PERIOD) { // Only folks who are not tested 
+				found = true;
+			} else {
+				randomPerson = (long) rand() % people.size(); 	 					// Random Search 
+			}
+		}
+		return randomPerson;
+	}
+
+	float chances() {
+		return (float) rand() / (float)RAND_MAX; 		// Chances in Life
+	}
+
+	// ================================================================================================
+	//  1st Person Daily Interaction Simulation In Dormant Times 
+	// ================================================================================================
+	void simulateDailyInteraction(long id){ 
+		Person person = people.at(id);
+		int status = person.getStatus();
+		
+		// Infected ====================================================================================
+		if (status > 0) {
+			status++; 
+			if (status > DORMANT_PERIOD ) { 															// Self Isolation & Recovering 
+				if (status > person.getRecoveryPd() + DORMANT_PERIOD) {	
+					people.at(id).setStatus(-1);															// Person Recovered 
+				} else {
+					people.at(id).setStatus(status);
+				}
+			}	else {																							// Infected BUT not identified yet 
+				Person rand; 
+				int randId;
+				for (int i = 0; i < person.getInteraction(); i++) {
+					randId = randomEncounter(id);
+					rand = people.at(randId);
+					if (rand.getStatus() == 0 && chances() < INFECTION_RATE){
+						people.at(randId).setStatus(1);
+					}
+					people.at(id).setStatus(status);
+				} 
+			}	
+		// Uninfected ====================================================================================
+		} else if (status == 0) {															
+			bool infected = false; 
+			Person rand;
+			int randId;
+			for (int i = 0; i < person.getInteraction(); i++) {
+				randId = randomEncounter(id);
+				rand = people.at(randId);
+				if (infected == false) {
+					if ((rand.getStatus() > 0 && rand.getStatus() < DORMANT_PERIOD) && chances() < INFECTION_RATE) {
+						people.at(id).setStatus(1);
+					}
+				} else {
+					if (rand.getStatus() == 0) {
+						people.at(randId).setStatus(1);
+					}
+				}
+			}
+			if (infected == true) {
+				people.at(id).setStatus(status+1);
+			}
+		}
+	}	
+
+	// Set & Get  	
+	// ================================================================================================	
+	
 
 	void setInitialCond(long innoculate_num,long infection_num) {
 		printf("Setting Initial Conditions \n");
-
-		setInitInnoculated(innoculate_num);
-		setInitInfection(infection_num,innoculate_num);
-	}
-
-	int getDay(){					// returns day 
-		return day;
+		long final_num = infection_num + innoculate_num;
+		for (long i = 0; i < final_num; i++ ) {
+			if (i < infection_num) {
+				people.at(i).setStatus(1);
+			} else {
+				people.at(i).setStatus(-2);
+			}
+		}
 	}
 
 	// Update Population 
 	// ================================================================================================
 	void updatePopulation(int days) {	// updates population based on interaction per day until no one's sick 
-		current_status(); 		  // outputs current status 
+		long countP, countN, countR, countI;
+		
+		auto result = countStatus();
+		countP = result.p;
+		countN = result.n;
+		countR = result.r;
+		countI = result.i;
+		outputStatus(countP,countN,countR,countI);
+
 		std::ofstream outputFile; 
 		outputFile.open("Disease_Simualation.csv");
 		outputFile << "Total Population :," <<  people.size() << endl;
-		outputFile << "Day, Total Sickness, Uninfected, Recovered / Innoculated" << endl;
-		long countP, countN, countR;
+		outputFile << "Day, Total Sickness, Uninfected, Self-Isolation / Treatmentm, Recovered / Innoculated" << endl;
+		
 		while (days > day) {	
 			day++; 
-			dayOutput(); 
-			for (long i = 0; i < people.size(); i++) { 
-				int status = people.at(i).getStatus();
-				if (status >= 0 && status <= DORMANT_PERIOD) {								// Infected & In Dormant Period 
-					people.at(i) = simulateDailyInteraction(people.at(i),i);		// Simulating Daily Interaction 
-				} 
+			#ifdef _OPENMP
+			#pragma omp parallel for schedule(runtime) 
+			for (long i = 0; i < people.size(); i++) {
+				people[i].setInteraction(setInteractionNum());	// Adjusting Interaction 
+				simulateDailyInteraction(i);		// Simulating Daily Interaction 
 			}
+			#endif
 			auto result = countStatus();
 			countP = result.p;
 			countN = result.n;
 			countR = result.r;
-			outputFile <<  day << "," << countP << "," << countN << "," << countR << endl;
-			outputStatus(countP,countN,countR);
+			countI = result.i;
+			outputFile <<  day << "," << countP << "," << countN << ","  << countI << "," << countR << endl;
+			outputStatus(countP,countN,countR,countI);
 		}
 		outputFile.close();
 		printf("Data saved to file!");
-	}
+	}	
+};
 
-	
-};		
+double getTime() {
+  struct timeval time; 
+  gettimeofday(&time,NULL);
+  return (double)time.tv_sec + (double)time.tv_usec * .000001; 
+}
+
 // ================================================================================================
 // Main Function 
 // ================================================================================================
 int main() {
-	long pop_size = 2000; 	// population size
-	long inn_size = 20; 	// Number of Immune People  
-	long infect_size = 20; 
-	int off = 1;  	// Code Termination Switch; 
-	int days = 30;
+	#ifdef _OPENMP
+	printf("There are %d processors available \n", omp_get_num_procs());
+	omp_set_num_threads(64);
+	#endif
+
+	long pop_size = 200000000; 	// population size
+	long inocuated_size = 100; 	// Number of Immune People  
+	long infect_size = 1; 
+	int days = 50;
+	double start, tInit, tSet, tSimulate;
 
 // Simulation Variables 
 // ================================================================================================
@@ -218,14 +276,26 @@ int main() {
 	cout << right << setw(41) << "< SIMULATION >" << endl;
 	cout << endl;
 
+	start = getTime();
 	Population p1(pop_size);
-	cout << "Population Generated" << endl;
-	p1.setInitialCond(inn_size,infect_size); 
-	cout << "Initial Conditions Set" << endl;
+	tInit = getTime() - start; 
+	
+	start = getTime(); 
+	p1.setInitialCond(inocuated_size,infect_size); 
+	tSet = getTime() - start;
+	
+	start = getTime();
 	p1.updatePopulation(days);
+	tSimulate = getTime() - start;
+	
+
+	printf("Population Generated in %g seconds\n", tInit);
+	printf("Initial Conditions Set in %g seconds\n", tSet);
+	printf("Simulation Finished - %g seconds\n", tSimulate);
 
 	cout << endl;
 	cout << "Program Terminated" << endl; 
 	cout << "Rick Sungsoo Kim, 2020" << endl;
 	cout << "The University of Texas at Austin, Cockrell School of Engineering" << endl;
+	cout << DORMANT_PERIOD << endl;
 }
