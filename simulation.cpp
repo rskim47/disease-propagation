@@ -44,6 +44,10 @@ class Population : Person {     // object composed of multiple person (inheritan
 		day = 0; 
 	}
 
+ int getDay() {
+	 return day;
+ }
+
 	// Initialize Population 
 	// ================================================================================================
 	void setPopulation(long size){	
@@ -323,10 +327,10 @@ int main() {
 	omp_set_num_threads(8);
 	#endif
 
-	long pop_size = 2000000; 	// population size
+	long pop_size = 4000000; 	// population size
 	long inocuated_size = 1000; 	// Number of Immune People  
-	long infect_size = 1; 
-	int days = 90;
+	long infect_size = 2; 
+	int days = 35;
 	double start, tInit, tSet, tSimulate;
 
 // Simulation Variables 
@@ -362,6 +366,8 @@ int main() {
 	printf("Population Generation :		 %g seconds\n", tInit);
 	printf("Initial Conditions Set: 	 %g seconds\n", tSet);
 	printf("Simulation						:    %g seconds\n", tSimulate);
+	printf("Days 									:    %d days\n", p1.getDay());
+	printf("Average Simulation    :    %g seconds / simulation\n", tSimulate / p1.getDay());
 
 	cout << endl;
 	cout << "Program Terminated" << endl; 
