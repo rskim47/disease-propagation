@@ -22,7 +22,9 @@ using namespace std;
 #define INTERACTION_SD 2
 #define DORMANT_PERIOD 14  													// Virus Dormant Range 
 #define RECOVERY_MEAN 14 														// Recovery Period (Mean, SD)
-#define RECOVERY_SD 5 															
+#define RECOVERY_SD 5 				
+#define RANDOM_PERCENT 0.1													// weight of random encounters 	
+#define CLOSE_PEOPLE 30															// Number of Close friends & Family 						
 
 // ================================================================================================
 // Population Class
@@ -42,13 +44,16 @@ class Population : Person {     // object composed of multiple person (inheritan
 		day = 0; 
 	}
 
+	// Initialize Population 
+	// ================================================================================================
 	void setPopulation(long size){	
 		Person random;
 		for (long i = 0; i < size; i++){
 			people.push_back(random); 
 		}
 	}
-
+	// Interactions 
+	// ================================================================================================
 	int setInteractionNum() {
 
 		std::default_random_engine generator; 
@@ -57,6 +62,8 @@ class Population : Person {     // object composed of multiple person (inheritan
 		return (int) distribution(generator);  						
 	}
 
+	// Recovery Period 
+	// ================================================================================================
 	int setRecoveryPd() {
 
 		std::default_random_engine generator; 
@@ -65,6 +72,8 @@ class Population : Person {     // object composed of multiple person (inheritan
 		return (int) distribution(generator);  						
 	}
 
+	// Status Output
+	// ================================================================================================
 	void outputStatus(long countP, long countN, long countR, long countI) {
 		if (day < 10 ) {
 			printf("<  DAY   %d >   ", day);
@@ -74,6 +83,8 @@ class Population : Person {     // object composed of multiple person (inheritan
 		cout << "Inf: " << left << setw(10) << countP << "    Non-inf: " << left << setw(10) << countN << "    Self-isolation : " << left << setw(10) << countI << "    Rec OR Inn: " << left << countR << endl;					   
 	}
  
+	// Counting Current Status 
+	// ================================================================================================
 	auto countStatus() { 																	   // returns total # of infection 
 		// Set as reduction 
 		long countP = 0;			// total sickness
@@ -116,7 +127,8 @@ class Population : Person {     // object composed of multiple person (inheritan
 		struct result { long p; long n; long r; long i;};
 		return result {countP, countN, countR, countI};
 	}	
-
+	// Finding Random Encounters 
+	// ================================================================================================
 	long randomEncounter(long id) {
 		bool found = false; 
 		long randomPerson = (long) rand() % people.size(); 	 					// Random Person 
@@ -132,6 +144,37 @@ class Population : Person {     // object composed of multiple person (inheritan
 
 	float chances() {
 		return (float) rand() / (float)RAND_MAX; 		// Chances in Life
+	}
+	// Finding Known Encounters
+	// ================================================================================================
+	long knownEncounter(long id) {
+		long size = people.size();																				// Total Size of People 
+		int interactionSize = people.at(id).getInteraction();							// Interaction Size 
+		long relFriend = (long) rand() % CLOSE_PEOPLE - CLOSE_PEOPLE;     // Relative Location of Friend in People to "me"
+
+		if ((id + relFriend) < 0 ) {
+			relFriend = id + relFriend + size - 1; 
+		} else if ((id + relFriend >= size)) {
+			relFriend = id + relFriend - size - 1;
+		}
+		return relFriend; 
+	}
+
+	// Full Encounter Simulation
+	// ================================================================================================
+	vector<long> encounterSimulation(long id) {
+		int interactionSize = people.at(id).getInteraction(); 						// # of interaction 
+		int newP = (int) ceil((float) interactionSize * RANDOM_PERCENT); 	// # of new interaction 
+		if (id == 10){
+		printf("%d",newP);}
+		vector<long> results;
+		for (int i = 0; i < newP; i++) {		
+			results.push_back(randomEncounter(id));													// Random Encounter
+		} 
+		for (int i = 0; i < interactionSize - newP; i++) {								// Known Encounter (Family, coworkers etc. )
+			results.push_back(knownEncounter(id));
+		}
+		return results;
 	}
 
 	// ================================================================================================
@@ -153,8 +196,9 @@ class Population : Person {     // object composed of multiple person (inheritan
 			}	else {																							// Infected BUT not identified yet 
 				Person rand; 
 				int randId;
-				for (int i = 0; i < person.getInteraction(); i++) {
-					randId = randomEncounter(id);
+				vector<long> encounter = encounterSimulation(id);
+				for (int i = 0; i < encounter.size(); i++) {
+					randId = encounter[i];
 					rand = people.at(randId);
 					if (rand.getStatus() == 0 && chances() < INFECTION_RATE){
 						people.at(randId).setStatus(1);
@@ -167,8 +211,9 @@ class Population : Person {     // object composed of multiple person (inheritan
 			bool infected = false; 
 			Person rand;
 			int randId;
-			for (int i = 0; i < person.getInteraction(); i++) {
-				randId = randomEncounter(id);
+			vector<long> encounter = encounterSimulation(id);
+			for (int i = 0; i < encounter.size(); i++) {
+				randId = encounter[i];
 				rand = people.at(randId);
 				if (infected == false) {
 					if ((rand.getStatus() > 0 && rand.getStatus() < DORMANT_PERIOD) && chances() < INFECTION_RATE) {
@@ -186,13 +231,13 @@ class Population : Person {     // object composed of multiple person (inheritan
 		}
 	}	
 
-	// Set & Get  	
-	// ================================================================================================	
-	
+	// Initial Conditions 
+	// ================================================================================================  	
 
 	void setInitialCond(long innoculate_num,long infection_num) {
 		printf("Setting Initial Conditions \n");
 		long final_num = infection_num + innoculate_num;
+		
 		for (long i = 0; i < final_num; i++ ) {
 			if (i < infection_num) {
 				people.at(i).setStatus(1);
@@ -253,13 +298,13 @@ double getTime() {
 int main() {
 	#ifdef _OPENMP
 	printf("There are %d processors available \n", omp_get_num_procs());
-	omp_set_num_threads(64);
+	omp_set_num_threads(32);
 	#endif
 
-	long pop_size = 200000000; 	// population size
-	long inocuated_size = 100; 	// Number of Immune People  
-	long infect_size = 1; 
-	int days = 50;
+	long pop_size = 100; 	// population size
+	long inocuated_size = 1; 	// Number of Immune People  
+	long infect_size = 2; 
+	int days = 2;
 	double start, tInit, tSet, tSimulate;
 
 // Simulation Variables 
@@ -273,8 +318,11 @@ int main() {
 	// cout << "Enter # of Days to Simulate: "; 
 	// cin >> days;
 	// cout << endl;
+
+
 	cout << right << setw(41) << "< SIMULATION >" << endl;
 	cout << endl;
+	printf("Population: %llu Infection: %llu Inoculated: %llu ", pop_size, infect_size, inocuated_size);
 
 	start = getTime();
 	Population p1(pop_size);
@@ -287,8 +335,8 @@ int main() {
 	start = getTime();
 	p1.updatePopulation(days);
 	tSimulate = getTime() - start;
-	
 
+	cout << endl;
 	printf("Population Generated in %g seconds\n", tInit);
 	printf("Initial Conditions Set in %g seconds\n", tSet);
 	printf("Simulation Finished - %g seconds\n", tSimulate);
@@ -297,5 +345,4 @@ int main() {
 	cout << "Program Terminated" << endl; 
 	cout << "Rick Sungsoo Kim, 2020" << endl;
 	cout << "The University of Texas at Austin, Cockrell School of Engineering" << endl;
-	cout << DORMANT_PERIOD << endl;
 }
