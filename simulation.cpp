@@ -17,10 +17,10 @@ using namespace std;
 #endif
  
 // Macros
-#define INFECTION_RATE 0.1 													// 30% 
+#define INFECTION_RATE 0.1 													// 10% 
 #define INTERACTION_MEAN 12  												// Interactions per Day (Mean, SD)
 #define INTERACTION_SD 2
-#define DORMANT_PERIOD 14  													// Virus Dormant Range 
+#define DORMANT_PERIOD 9  													// Virus Dormant Range 
 #define RECOVERY_MEAN 14 														// Recovery Period (Mean, SD)
 #define RECOVERY_SD 5 				
 #define RANDOM_PERCENT 0.1													// weight of random encounters 	
@@ -143,30 +143,28 @@ class Population : Person {     // object composed of multiple person (inheritan
 	}
 
 	float chances() {
-		return (float) rand() / (float)RAND_MAX; 		// Chances in Life
+		return ((float) rand() / RAND_MAX); 		// Chances in Life
 	}
 	// Finding Known Encounters
 	// ================================================================================================
-	long knownEncounter(long id) {
-		long size = people.size();																				// Total Size of People 
-		int interactionSize = people.at(id).getInteraction();							// Interaction Size 
-		long relFriend = (long) rand() % CLOSE_PEOPLE - CLOSE_PEOPLE;     // Relative Location of Friend in People to "me"
-
-		if ((id + relFriend) < 0 ) {
-			relFriend = id + relFriend + size - 1; 
-		} else if ((id + relFriend >= size)) {
-			relFriend = id + relFriend - size - 1;
+	long knownEncounter(long id) { 
+		int interactionSize = people.at(id).getInteraction();													// Interaction Size 
+		long cfriend = id + (rand() %CLOSE_PEOPLE - CLOSE_PEOPLE/2);     // Relative Location of Friend in People to "me"
+		int temp = cfriend;
+		long result; 
+		if ((cfriend) < 0 ) {
+			cfriend = cfriend + people.size();
+		} else if (cfriend >= people.size()) {
+			cfriend = cfriend - people.size();
 		}
-		return relFriend; 
+		return cfriend; 
 	}
 
 	// Full Encounter Simulation
 	// ================================================================================================
 	vector<long> encounterSimulation(long id) {
 		int interactionSize = people.at(id).getInteraction(); 						// # of interaction 
-		int newP = (int) ceil((float) interactionSize * RANDOM_PERCENT); 	// # of new interaction 
-		if (id == 10){
-		printf("%d",newP);}
+		int newP = (int) ceil((float) interactionSize * RANDOM_PERCENT); 	// # of new interaction
 		vector<long> results;
 		for (int i = 0; i < newP; i++) {		
 			results.push_back(randomEncounter(id));													// Random Encounter
@@ -264,7 +262,8 @@ class Population : Person {     // object composed of multiple person (inheritan
 		outputFile << "Total Population :," <<  people.size() << endl;
 		outputFile << "Day, Total Sickness, Uninfected, Self-Isolation / Treatmentm, Recovered / Innoculated" << endl;
 		
-		while (days > day) {	
+		bool off = false; 
+		while (days > day && off == false) {	
 			day++; 
 			#ifdef _OPENMP
 			#pragma omp parallel for schedule(runtime) 
@@ -283,6 +282,10 @@ class Population : Person {     // object composed of multiple person (inheritan
 		}
 		outputFile.close();
 		printf("Data saved to file!");
+		if (countR == people.size()) {
+			printf("Everyone has recovered");
+			off = true; 
+		}
 	}	
 };
 
@@ -298,13 +301,13 @@ double getTime() {
 int main() {
 	#ifdef _OPENMP
 	printf("There are %d processors available \n", omp_get_num_procs());
-	omp_set_num_threads(32);
+	omp_set_num_threads(8);
 	#endif
 
-	long pop_size = 100; 	// population size
-	long inocuated_size = 1; 	// Number of Immune People  
-	long infect_size = 2; 
-	int days = 2;
+	long pop_size = 2000000; 	// population size
+	long inocuated_size = 1000; 	// Number of Immune People  
+	long infect_size = 1; 
+	int days = 90;
 	double start, tInit, tSet, tSimulate;
 
 // Simulation Variables 
@@ -322,7 +325,7 @@ int main() {
 
 	cout << right << setw(41) << "< SIMULATION >" << endl;
 	cout << endl;
-	printf("Population: %llu Infection: %llu Inoculated: %llu ", pop_size, infect_size, inocuated_size);
+	printf("Population: %llu    Infection: %llu    Inoculated: %llu \n", pop_size, infect_size, inocuated_size);
 
 	start = getTime();
 	Population p1(pop_size);
@@ -337,9 +340,9 @@ int main() {
 	tSimulate = getTime() - start;
 
 	cout << endl;
-	printf("Population Generated in %g seconds\n", tInit);
-	printf("Initial Conditions Set in %g seconds\n", tSet);
-	printf("Simulation Finished - %g seconds\n", tSimulate);
+	printf("Population Generation :		 %g seconds\n", tInit);
+	printf("Initial Conditions Set: 	 %g seconds\n", tSet);
+	printf("Simulation						:    %g seconds\n", tSimulate);
 
 	cout << endl;
 	cout << "Program Terminated" << endl; 
