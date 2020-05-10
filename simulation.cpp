@@ -10,6 +10,7 @@
 #include <sys/time.h> 
 #include <fstream>
 #include <tuple>
+#include <stdlib.h>
 #include "Person.cpp"
 using namespace std;
 #ifdef _OPENMP
@@ -17,7 +18,7 @@ using namespace std;
 #endif
  
 // Macros
-#define INFECTION_RATE 0.1 													// 10% 
+#define INFECTION_RATE 0.1 												// 10% 
 #define INTERACTION_MEAN 12  												// Interactions per Day (Mean, SD)
 #define INTERACTION_SD 2
 #define DORMANT_PERIOD 9  													// Virus Dormant Range 
@@ -98,7 +99,7 @@ class Population : Person {     // object composed of multiple person (inheritan
 		long sickTotal = 0;
 		int status;
 		#ifdef _OPENMP
-		#pragma omp parallel for schedule(dynamic) reduction (+:countR,countN,countP,countI)
+		#pragma omp parallel for schedule(static,100) reduction (+:countR,countN,countP,countI)
 		for ( long i = 0; i < people.size(); i++) {
 			status = people.at(i).getStatus();
 			if ( status < 0 ) {
@@ -148,26 +149,33 @@ class Population : Person {     // object composed of multiple person (inheritan
 	// ================================================================================================
 	long randomEncounter(long id) {
 		bool found = false; 
-		long randomPerson = (long) rand() % people.size(); 	 					// Random Person 
+		unsigned int myseed = omp_get_thread_num();
+		long randomPerson = (long) (((float)rand_r(&myseed)/RAND_MAX) * people.size()); 	 					// Random Person 
 		while (found == false) {
 			if (randomPerson != id && people.at(randomPerson).getStatus() < DORMANT_PERIOD) { // Only folks who are not tested 
 				found = true;
 			} else {
-				randomPerson = (long) rand() % people.size(); 	 					// Random Search 
+				randomPerson = (long) (((float)rand_r(&myseed)/RAND_MAX) * people.size());  	 					// Random Search 
 			}
+			
 		}
 		return randomPerson;
 	}
 
 	float chances() {
-		return ((float) rand() / RAND_MAX); 		// Chances in Life
+		
+		std:: default_random_engine generator;
+		std:: uniform_real_distribution<double> distribution (0.0,1.0);
+
+		return (float)distribution(generator); 		// Chances in Life
 	}
 	// Finding Known Encounters
 	// ================================================================================================
 	long knownEncounter(long id) { 
-		int interactionSize = people.at(id).getInteraction();													// Interaction Size 
-		long cfriend = id + (rand() %CLOSE_PEOPLE - CLOSE_PEOPLE/2);     // Relative Location of Friend in People to "me"
-		int temp = cfriend;
+		int interactionSize = people.at(id).getInteraction();											 // Interaction Size 
+		unsigned int myseed = omp_get_thread_num();
+		long cfriend = long (id + ((float)rand_r(&myseed) / RAND_MAX) * CLOSE_PEOPLE - CLOSE_PEOPLE/2);     // Relative Location of Friend in People to "me"
+
 		long result; 
 		if ((cfriend) < 0 ) {
 			cfriend = cfriend + people.size();
@@ -247,12 +255,13 @@ class Population : Person {     // object composed of multiple person (inheritan
 	}	
 
 	// Initial Conditions 
-	// ================================================================================================  	
-
-	void setInitialCond(long innoculate_num,long infection_num) {
+	// ================================================================================================  
+	void setInitialCond(long inoculate_num,long infection_num) {
 		printf("Setting Initial Conditions \n");
-		long final_num = infection_num + innoculate_num;
+		long final_num = infection_num + inoculate_num;
 		
+		#ifdef _OPENMP
+		#pragma omp parallel for schedule(static,100) 
 		for (long i = 0; i < final_num; i++ ) {
 			if (i < infection_num) {
 				people.at(i).setStatus(1);
@@ -260,11 +269,20 @@ class Population : Person {     // object composed of multiple person (inheritan
 				people.at(i).setStatus(-2);
 			}
 		}
+		#else 
+		for (long i = 0; i < final_num; i++ ) {
+			if (i < infection_num) {
+				people.at(i).setStatus(1);
+			} else {
+				people.at(i).setStatus(-2);
+			}
+		}
+		#endif
 	}
 
 	// Update Population 
 	// ================================================================================================
-	void updatePopulation(int days) {	// updates population based on interaction per day until no one's sick 
+	void simulate(int days) {	// updates population based on interaction per day until no one's sick 
 		long countP, countN, countR, countI;
 		
 		auto result = countStatus();
@@ -283,8 +301,9 @@ class Population : Person {     // object composed of multiple person (inheritan
 		while (days > day && off == false) {	
 			day++; 
 			#ifdef _OPENMP
-			#pragma omp parallel for schedule(runtime) 
-			for (long i = 0; i < people.size(); i++) {
+			long i;
+			#pragma omp parallel for schedule(static,100) private(i)
+			for (i = 0; i < people.size(); i++) {
 				people[i].setInteraction(setInteractionNum());	// Adjusting Interaction 
 				simulateDailyInteraction(i);		// Simulating Daily Interaction 
 			}
@@ -305,10 +324,10 @@ class Population : Person {     // object composed of multiple person (inheritan
 		}
 		outputFile.close();
 		printf("Data saved to file!");
-		if (countR == people.size()) {
-			printf("Everyone has recovered");
-			off = true; 
-		}
+		// if (countR == people.size()) {
+		// 	printf("Everyone has recovered");
+		// 	off = true; 
+		// }
 	}	
 };
 
@@ -324,7 +343,14 @@ double getTime() {
 int main() {
 	#ifdef _OPENMP
 	printf("There are %d processors available \n", omp_get_num_procs());
-	omp_set_num_threads(8);
+	omp_set_num_threads(2);
+	srand(time(NULL));
+	#pragma omp parallel
+	{
+		unsigned int myseed = omp_get_thread_num();
+		printf("This is thread %d\n", omp_get_thread_num());
+		cout << (float)rand_r(&myseed)/RAND_MAX << endl;
+	}
 	#endif
 
 	long pop_size = 4000000; 	// population size
@@ -332,19 +358,6 @@ int main() {
 	long infect_size = 2; 
 	int days = 35;
 	double start, tInit, tSet, tSimulate;
-
-// Simulation Variables 
-// ================================================================================================
-	// cout << "Enter Population: ";
-	// cin >> pop_size;
-	// cout << "Enter # of Intially Infected People: ";
-	// cin >> infect_size;
-	// cout << "Enter # of Innoculated People: "; 
-	// cin >> inn_size;
-	// cout << "Enter # of Days to Simulate: "; 
-	// cin >> days;
-	// cout << endl;
-
 
 	cout << right << setw(41) << "< SIMULATION >" << endl;
 	cout << endl;
@@ -359,7 +372,7 @@ int main() {
 	tSet = getTime() - start;
 	
 	start = getTime();
-	p1.updatePopulation(days);
+	p1.simulate(days);
 	tSimulate = getTime() - start;
 
 	cout << endl;
