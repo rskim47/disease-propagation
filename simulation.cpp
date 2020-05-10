@@ -107,6 +107,19 @@ class Population : Person {     // object composed of multiple person (inheritan
 				countI++;
 			}
 		}
+		#else 
+		for ( long i = 0; i < people.size(); i++) {
+			status = people.at(i).getStatus();
+			if ( status < 0 ) {
+				countR++; 
+			} else if ( status == 0 ) {
+				countN++; 
+			} else if ( status < DORMANT_PERIOD ) {
+				countP++; 
+			} else {
+				countI++;
+			}
+		}
 		#endif
 
 		double isolationPercent = (float) countI / (float) people.size(); 
@@ -271,7 +284,13 @@ class Population : Person {     // object composed of multiple person (inheritan
 				people[i].setInteraction(setInteractionNum());	// Adjusting Interaction 
 				simulateDailyInteraction(i);		// Simulating Daily Interaction 
 			}
+			#else 
+			for (long i = 0; i < people.size(); i++) {
+				people[i].setInteraction(setInteractionNum());	// Adjusting Interaction 
+				simulateDailyInteraction(i);		// Simulating Daily Interaction 
+			}
 			#endif
+
 			auto result = countStatus();
 			countP = result.p;
 			countN = result.n;
